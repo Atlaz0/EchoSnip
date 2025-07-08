@@ -1,0 +1,30 @@
+      
+
+identifier: "**%"
+folder_path: "C:/Users/User/Desktop/Coding" 
+output_path: "C:/Users/User/Desktop/Coding/EchoSnip/found_snippets.txt"
+debug_log_path: "C:/Users/User/Desktop/Coding/EchoSnip/debug_log.txt"
+debug: True
+languages:
+  Python:
+    extensions:
+      - ".py"
+    block_type: "indentation"  
+  C++:
+    extensions:
+      - ".cpp"
+    block_type: "braces" 
+  CS:
+    extensions:
+      - ".css"
+    block_type: "braces"     
+  HTML:
+    extensions:
+      - ".html"
+    block_type: "marker"      
+  Javascript:
+    extensions:
+      - ".js"
+    block_type: "braces"
+
+    
