@@ -1,0 +1,18 @@
+# Virtual Environment
+# This folder contains all the project-specific packages.
+venv/
+
+# PyInstaller generated folders
+# These folders contain the build process files and final executable.
+build/
+dist/
+
+# PyInstaller generated files
+# Using a wildcard (*) ignores any .spec or .exe file.
+*.spec
+*.exe
+
+# Python bytecode and cache
+# This keeps compiled Python files out of the repository.
+__pycache__/
+*.pyc
