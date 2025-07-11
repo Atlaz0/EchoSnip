@@ -1,45 +1,169 @@
-folder_path: "C:/Users/User/Desktop/Coding"
-output_path: "C:/Users/User/Desktop/Coding/EchoSnip/found_snippets.txt"
-debug_log_path: "C:/Users/User/Desktop/Coding/EchoSnip/debug_log.txt"
-debug: true
+      
+# ===================================================================
+# EchoSnip Configuration File
+# ===================================================================
+# This file defines the languages and search settings for the app.
+#
+# IMPORTANT: You must modify the file paths below to match your
+# system setup.
+# ===================================================================
+
+# --- General Settings ---
+# The top-level folder where your code projects are stored.
+folder_path: "C:/path/to/your/projects"
+
+# Path for the debug log file.
+debug_log_path: "C:/path/to/your/debug_log.txt"
+
+# Set to 'true' to enable detailed logging for troubleshooting.
+debug: false
+
+# ===================================================================
+# Language Definitions
+# ===================================================================
+# Add or modify languages here.
+# KEY EXPLANATION:
+#   block_type: How to find the end of a code block.
+#     - 'indentation': For Python, YAML, etc.
+#     - 'brace': For languages using {}.
+#     - 'html_tag': For HTML, XML.
+#     - 'marker': Captures until an 'end_marker' is found.
+#   identifier: The unique string in your comment (e.g., **%).
+#   comment_start/end: Characters for comments.
+#   end_marker: Required only when block_type is 'marker'.
+# ===================================================================
 
 languages:
+  # --- Scripting & General Purpose ---
   Python:
-    extensions:
-      - ".py"
+    extensions: [".py", ".pyw"]
     block_type: "indentation"
     identifier: "**%"
     comment_start: "#"
 
-  C++:
-    extensions:
-      - ".cpp"
-      - ".hpp"
-      - ".h"
+  Ruby:
+    extensions: [".rb"]
+    block_type: "marker"
+    identifier: "**%"
+    comment_start: "#"
+    end_marker: "#**% END"
+
+  Shell: # For Bash, sh, zsh
+    extensions: [".sh", ".bash"]
+    block_type: "marker"
+    identifier: "**%"
+    comment_start: "#"
+    end_marker: "#**% END"
+
+  PowerShell:
+    extensions: [".ps1"]
     block_type: "brace"
     identifier: "**%"
-    comment_start: "//"
+    comment_start: "#"
 
-  CSS:
-    extensions:
-      - ".css"
-    block_type: "brace"
-    identifier: "**%"
-    comment_start: "/*"
-    comment_end: "*/"
-
+  # --- Web Development ---
   HTML:
-    extensions:
-      - ".html"
-      - ".htm"
+    extensions: [".html", ".htm"]
     block_type: "html_tag"
     identifier: "**%"
     comment_start: "<!--"
     comment_end: "-->"
 
-  Javascript:
-    extensions:
-      - ".js"
+  CSS:
+    extensions: [".css"]
+    block_type: "brace"
+    identifier: "**%"
+    comment_start: "/*"
+    comment_end: "*/"
+
+  Sass: # For both .scss and .sass
+    extensions: [".scss", ".sass"]
+    block_type: "brace" # Primarily for .scss syntax
+    identifier: "**%"
+    comment_start: "//" # For SCSS syntax
+
+  JavaScript:
+    extensions: [".js", ".mjs", ".jsx"]
     block_type: "brace"
     identifier: "**%"
     comment_start: "//"
+
+  TypeScript:
+    extensions: [".ts", ".tsx"]
+    block_type: "brace"
+    identifier: "**%"
+    comment_start: "//"
+
+  PHP:
+    extensions: [".php"]
+    block_type: "brace"
+    identifier: "**%"
+    comment_start: "//"
+
+  # --- Compiled Languages ---
+  Cpp: # C++
+    extensions: [".cpp", ".hpp", ".h"]
+    block_type: "brace"
+    identifier: "**%"
+    comment_start: "//"
+
+  CSharp: # C#
+    extensions: [".cs"]
+    block_type: "brace"
+    identifier: "**%"
+    comment_start: "//"
+  
+  Java:
+    extensions: [".java"]
+    block_type: "brace"
+    identifier: "**%"
+    comment_start: "//"
+
+  Go:
+    extensions: [".go"]
+    block_type: "brace"
+    identifier: "**%"
+    comment_start: "//"
+
+  Rust:
+    extensions: [".rs"]
+    block_type: "brace"
+    identifier: "**%"
+    comment_start: "//"
+  
+  # --- Mobile Development ---
+  Swift:
+    extensions: [".swift"]
+    block_type: "brace"
+    identifier: "**%"
+    comment_start: "//"
+
+  Kotlin:
+    extensions: [".kt", ".kts"]
+    block_type: "brace"
+    identifier: "**%"
+    comment_start: "//"
+
+  # --- Data & Markup ---
+  SQL:
+    extensions: [".sql"]
+    block_type: "marker"
+    identifier: "**%"
+    comment_start: "--"
+    end_marker: "--**% END"
+
+  YAML:
+    extensions: [".yaml", ".yml"]
+    block_type: "indentation"
+    identifier: "**%"
+    comment_start: "#"
+
+  Markdown:
+    extensions: [".md", ".markdown"]
+    block_type: "marker"
+    identifier: "**%"
+    comment_start: "<!--"
+    comment_end: "-->"
+    end_marker: "<!--**% END-->"
+
+    

@@ -5,22 +5,23 @@ import time
 from datetime import datetime
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox
 
 #**% Global variable
 CONFIG = {}
 
-# --- [NEW] DEFINE YOUR COLOR PALETTE HERE ---
-# Changed the accent color from blue to amber/orange as requested.
-COLOR_PRIMARY_BACKGROUND = "#2b2b2b" # Dark grey
-COLOR_SECONDARY_BACKGROUND = "#3c3f41" # Lighter grey for widgets
-COLOR_TEXT = "#bbbbbb"                 # Light grey for normal text
-COLOR_TEXT_EMPHASIS = "#ffffff"        # Pure white for important text
-COLOR_PLACEHOLDER = "#8A8A8A"           # A dimmer grey for placeholder text
-COLOR_ACCENT = "#ffc107"                # Amber/Orange for buttons and highlights
-COLOR_ACCENT_HOVER = "#d39e00"          # A darker amber for when you hover
-COLOR_DISABLED_FG = "#888888"          # Foreground (text) for disabled widgets
-COLOR_DISABLED_BG = "#333333"          # Background for disabled widgets
-
+#**% Color palette
+COLOR_PRIMARY_BACKGROUND = "#1F2020"
+COLOR_SECONDARY_BACKGROUND = "#1B1B1B"
+COLOR_TEXT = "#fcfcfc"
+COLOR_TEXT_EMPHASIS = "#000000"
+COLOR_PLACEHOLDER = "#7A8088"
+COLOR_ACCENT = "#d5f1ec"
+COLOR_ACCENT_HOVER = "#a8c7c1"
+COLOR_DISABLED_FG = "#888888"
+COLOR_DISABLED_BG = "#333333"
+FONT_FAMILY_UI = "Segoe UI"
+FONT_FAMILY_CODE = "Consolas"
 
 #**% Write debug to debug file
 def debug_log(message=None, level="DEBUG"):
@@ -41,30 +42,28 @@ def debug_log(message=None, level="DEBUG"):
 #**% Load config file
 def load_config(path="config.yaml"):
     global CONFIG
-    debug_log(f" Attempting to load config file from '{path}'...")
     try:
         with open(path, "r") as f:
             CONFIG = yaml.safe_load(f)
-        debug_log(" Config file loaded successfully.")
+        debug_log("Config file loaded successfully.")
+        return True
     except FileNotFoundError:
-        debug_log(f" FATAL ERROR: Config file '{path}' not found. Please ensure it exists.")
-        exit(1)
+        messagebox.showerror("Fatal Error", f"Config file '{path}' not found.\nPlease ensure 'config.yaml' exists in the same directory as the application.")
+        return False
     except Exception as e:
-        debug_log(f" FATAL ERROR: Could not read or parse config file: {e}")
-        exit(1)
+        messagebox.showerror("Fatal Error", f"Could not read or parse config file:\n{e}")
+        return False
 
-# ... (All your file processing functions remain unchanged) ...
 #**% Extract identation block
 def extract_identation_block(lines, start_idx):
-    debug_log(f" Running extract_identation_block, starting after line {start_idx + 1}")
     block_start_idx = -1
     for i in range(start_idx + 1, len(lines)):
         if lines[i].strip():
             block_start_idx = i
             break
     if block_start_idx == -1: return "", start_idx
+
     base_indent = len(lines[block_start_idx]) - len(lines[block_start_idx].lstrip())
-    debug_log(f" Block starts on line {block_start_idx + 1}. Base indentation is {base_indent} spaces.")
     block_lines = []
     for i in range(block_start_idx, len(lines)):
         line = lines[i]
@@ -77,26 +76,26 @@ def extract_identation_block(lines, start_idx):
 
 #**% Extract brace block
 def extract_brace_block(lines, start_idx):
-    debug_log(f" Running extract_brace_block, starting after line {start_idx + 1}")
     block_start_idx = -1
     for i in range(start_idx + 1, len(lines)):
         if '{' in lines[i]:
             block_start_idx = i
             break
     if block_start_idx == -1: return "", start_idx
+
     block_lines = []
     brace_count = 0
     for i in range(block_start_idx, len(lines)):
         line = lines[i]
         block_lines.append(line)
-        brace_count += line.count('{') - line.count('}')
+        brace_count += line.count('{')
+        brace_count -= line.count('}')
         if brace_count <= 0:
             return "".join(block_lines).rstrip(), i
     return "".join(block_lines).rstrip(), i
 
 #**% Extract marker block
 def extract_marker_block(lines, start_idx, end_marker):
-    debug_log(f" Running extract_marker_block from line {start_idx + 1}, looking for '{end_marker}'")
     block = []
     for i in range(start_idx + 1, len(lines)):
         line = lines[i]
@@ -109,7 +108,6 @@ SELF_CLOSING_TAGS = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
 
 #**% Extract HTML code block with tags
 def extract_html_tag_block(lines, start_idx, identifier):
-    debug_log(f"Running extract_html_tag_block (stable specific-tag logic) starting after line {start_idx + 1}")
     block_start_idx = -1
     first_tag_name = ""
     for i in range(start_idx + 1, len(lines)):
@@ -119,9 +117,9 @@ def extract_html_tag_block(lines, start_idx, identifier):
             if tag_name not in SELF_CLOSING_TAGS:
                 first_tag_name = tag_name
                 block_start_idx = i
-                debug_log(f"Block starts on line {i + 1}. Tracking ONLY the tag: '<{first_tag_name}>'")
                 break
     if block_start_idx == -1: return "", start_idx
+
     block_lines = []
     tag_balance = 0
     open_tag_regex = re.compile(r'<\s*' + re.escape(first_tag_name) + r'[\s>]', re.IGNORECASE)
@@ -140,49 +138,52 @@ def find_snippets_by_keyword(keywords, language):
     all_snippets = []
     found_snippets_keys = set()
     lang_info = CONFIG['languages'][language]
-    extensions = lang_info['extensions']
-    block_type = lang_info['block_type']
-    identifier = lang_info['identifier'] 
     folder_path = CONFIG['folder_path']
-    comment_start = lang_info.get('comment_start', '')
-    comment_end = lang_info.get('comment_end', '')
+
     for root, _, files in os.walk(folder_path):
         for file in files:
-            if not any(file.endswith(ext) for ext in extensions):
+            if not any(file.endswith(ext) for ext in lang_info['extensions']):
                 continue
+            
             file_path = os.path.abspath(os.path.join(root, file))
             debug_log(f" Scanning file: {file_path}")
             try:
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                     lines = f.readlines()
+                
                 i = 0
                 while i < len(lines):
                     line = lines[i]
-                    is_marker_line = line.strip().startswith(comment_start) and identifier in line
+                    is_marker_line = line.strip().startswith(lang_info['comment_start']) and lang_info['identifier'] in line
                     has_all_keywords = all(kw in line.lower() for kw in keywords)
+
                     if is_marker_line and has_all_keywords:
-                        clean_desc = line.strip().replace(comment_start, '', 1)
-                        if comment_end: clean_desc = clean_desc.replace(comment_end, '', 1)
-                        clean_desc = clean_desc.replace(identifier, '').strip()
-                        file_name_only = os.path.basename(file_path)
-                        file_base_name, _ = os.path.splitext(file_name_only)
+                        clean_desc = line.strip().replace(lang_info['comment_start'], '', 1)
+                        if 'comment_end' in lang_info:
+                            clean_desc = clean_desc.replace(lang_info['comment_end'], '', 1)
+                        clean_desc = clean_desc.replace(lang_info['identifier'], '').strip()
+                        
+                        file_base_name = os.path.splitext(os.path.basename(file_path))[0]
                         unique_key = (file_base_name, clean_desc)
-                        if unique_key in found_snippets_keys:
-                            debug_log(f" Duplicate snippet found for key ('{file_base_name}', '{clean_desc}'). Skipping.")
-                        else:
+
+                        if unique_key not in found_snippets_keys:
                             found_snippets_keys.add(unique_key)
-                            debug_log(f"MATCH FOUND on line {i+1}: '{line.strip()}' (Unique Key: {unique_key})")
-                            block_content, end_line_index = "", i 
-                            if block_type == "indentation": block_content, end_line_index = extract_identation_block(lines, i)
-                            elif block_type == "brace": block_content, end_line_index = extract_brace_block(lines, i)
-                            elif block_type == 'html_tag': block_content, end_line_index = extract_html_tag_block(lines, i, identifier)
+                            
+                            block_type = lang_info['block_type']
+                            if block_type == "indentation":
+                                block_content, _ = extract_identation_block(lines, i)
+                            elif block_type == "brace":
+                                block_content, _ = extract_brace_block(lines, i)
+                            elif block_type == 'html_tag':
+                                block_content, _ = extract_html_tag_block(lines, i, lang_info['identifier'])
                             elif block_type == "marker":
-                                end_marker = lang_info.get('end_marker', f"{identifier} END")
-                                block_content, end_line_index = extract_marker_block(lines, i, end_marker)
+                                end_marker = lang_info.get('end_marker', f"{lang_info['identifier']} END")
+                                block_content, _ = extract_marker_block(lines, i, end_marker)
                             else:
-                                debug_log(f"ERROR: Unknown block_type '{block_type}' for language '{language}'. Skipping.")
+                                debug_log(f"ERROR: Unknown block_type '{block_type}' for language '{language}'.")
                                 i += 1
                                 continue
+                            
                             header = f"--- SNIPPET FOUND IN: {file_path} (Line {i+1}) ---\n"
                             header += f"--- DESCRIPTION: {clean_desc} ---\n\n"
                             all_snippets.append(header + block_content)
@@ -190,7 +191,6 @@ def find_snippets_by_keyword(keywords, language):
             except Exception as e:
                 debug_log(f"ERROR: Could not process {file_path}: {e}")
     return all_snippets
-
 
 #**% Tkinter GUI
 class EchoSnipApp(tk.Tk):
@@ -202,111 +202,97 @@ class EchoSnipApp(tk.Tk):
         self._setup_styles()
         self.configure(bg=COLOR_PRIMARY_BACKGROUND)
 
-        # --- [NEW] Define placeholder text strings ---
         self.desc_placeholder = "Enter a description to search for..."
-        self.lang_placeholder = "Select a language..."
+        self.lang_placeholder = "Language"
 
         main_frame = ttk.Frame(self, padding="10", style="App.TFrame")
         main_frame.pack(fill="both", expand=True)
         
-        input_frame = ttk.Frame(main_frame)
-        input_frame.pack(fill="x", pady=5)
+        input_frame = ttk.Frame(main_frame, style="App.TFrame")
+        input_frame.pack(fill="x", pady=(0, 5))
         
-        # --- [MODIFIED] Create Description Entry with Placeholder ---
-        # The Label is removed. We will manage the placeholder text directly.
-        self.desc_entry = ttk.Entry(input_frame)
+        self.desc_entry = ttk.Entry(input_frame, style="App.TEntry")
         self.desc_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
         self.desc_entry.bind("<FocusIn>", self._clear_placeholder_desc)
         self.desc_entry.bind("<FocusOut>", self._add_placeholder_desc)
-        self._add_placeholder_desc() # Set the initial placeholder
+        self._add_placeholder_desc()
 
-        # --- [MODIFIED] Create Language Combobox with Placeholder ---
-        # The Label is removed. The placeholder is now the first item in the list.
         lang_options = list(CONFIG.get('languages', {}).keys())
-        lang_options.insert(0, self.lang_placeholder) # Add placeholder to the list
         
-        self.lang_combobox = ttk.Combobox(input_frame, values=lang_options, state="readonly")
+        self.lang_combobox = ttk.Combobox(input_frame, values=lang_options, state="readonly", width=15, style="App.TCombobox")
         self.lang_combobox.pack(side="left", padx=5)
-        self.lang_combobox.set(self.lang_placeholder) # Set the initial value
+        self.lang_combobox.set(self.lang_placeholder)
         self.lang_combobox.bind("<<ComboboxSelected>>", self._update_combobox_style)
-        self._update_combobox_style() # Set the initial text color
+        self._update_combobox_style()
         
-        # --- [MODIFIED] Use the new "Round.TButton" style ---
         self.search_button = ttk.Button(input_frame, text="Search", command=self.perform_search, style="Round.TButton")
         self.search_button.pack(side="left", padx=5)
             
-        results_frame = ttk.Frame(main_frame)
-        results_frame.pack(fill="both", expand=True, pady=10)
+        results_frame = ttk.Frame(main_frame, style="App.TFrame")
+        results_frame.pack(fill="both", expand=True, pady=(10, 0))
         
-        self.results_text = tk.Text(results_frame, wrap="word", width=100, height=30, background=COLOR_SECONDARY_BACKGROUND,
-                                    foreground=COLOR_TEXT, insertbackground=COLOR_TEXT_EMPHASIS, selectbackground=COLOR_ACCENT,
-                                    selectforeground=COLOR_TEXT_EMPHASIS, relief="flat", borderwidth=1, highlightthickness=1,
-                                    highlightbackground=COLOR_PRIMARY_BACKGROUND, highlightcolor=COLOR_ACCENT)
+        self.results_text = tk.Text(results_frame, wrap="word", background=COLOR_SECONDARY_BACKGROUND,
+                                    foreground=COLOR_TEXT, insertbackground=COLOR_TEXT, selectbackground=COLOR_ACCENT,
+                                    selectforeground=COLOR_TEXT_EMPHASIS, relief="flat", borderwidth=0,
+                                    font=(FONT_FAMILY_CODE, 10))
         
-        scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=self.results_text.yview)
+        scrollbar = ttk.Scrollbar(results_frame, orient="vertical", command=self.results_text.yview) 
         self.results_text.configure(yscrollcommand=scrollbar.set)
-        
+
         scrollbar.pack(side="right", fill="y")
         self.results_text.pack(side="left", fill="both", expand=True)
-            
-        self.status_bar = ttk.Label(main_frame, text="Ready.", anchor="w")
-        self.status_bar.pack(side="bottom", fill="x")
 
-    # --- [NEW] Methods for managing placeholder in Description Entry ---
     def _add_placeholder_desc(self, event=None):
-        """Adds placeholder text if the entry is empty."""
         if not self.desc_entry.get():
             self.desc_entry.insert(0, self.desc_placeholder)
-            self.desc_entry.config(foreground=COLOR_PLACEHOLDER)
+            self.desc_entry.config(style="Placeholder.TEntry")
 
     def _clear_placeholder_desc(self, event=None):
-        """Clears placeholder text on focus."""
         if self.desc_entry.get() == self.desc_placeholder:
             self.desc_entry.delete(0, "end")
-            self.desc_entry.config(foreground=COLOR_TEXT)
+            self.desc_entry.config(style="App.TEntry")
 
-    # --- [NEW] Method for managing placeholder style in Language Combobox ---
     def _update_combobox_style(self, event=None):
-        """Changes combobox text color based on whether it's a placeholder."""
-        current_value = self.lang_combobox.get()
-        if current_value == self.lang_placeholder:
-            # When the placeholder is showing, use the placeholder color
-            self.lang_combobox.config(foreground=COLOR_PLACEHOLDER)
+        if self.lang_combobox.get() == self.lang_placeholder:
+            self.lang_combobox.config(style="Placeholder.TCombobox")
         else:
-            # When a real language is selected, use the normal text color
-            self.lang_combobox.config(foreground=COLOR_TEXT)
+            self.lang_combobox.config(style="App.TCombobox")
                                      
     def _setup_styles(self):
         style = ttk.Style(self)
         style.theme_use('clam')
 
-        # --- General Widget Configurations ---
         style.configure('TFrame', background=COLOR_PRIMARY_BACKGROUND)
         style.configure('App.TFrame', background=COLOR_PRIMARY_BACKGROUND)
-        style.configure('TLabel', background=COLOR_PRIMARY_BACKGROUND, foreground=COLOR_TEXT, font=('Segoe UI', 10))
         
-        style.configure('TEntry', fieldbackground=COLOR_SECONDARY_BACKGROUND, foreground=COLOR_TEXT,
-                        insertcolor=COLOR_TEXT_EMPHASIS, borderwidth=0, relief='flat')
-        
-        # --- [MODIFIED] Combobox Style ---
-        # We now use a direct .config() in the placeholder methods to handle the
-        # foreground color dynamically, so we set the default here.
-        style.configure('TCombobox', fieldbackground=COLOR_SECONDARY_BACKGROUND, background=COLOR_SECONDARY_BACKGROUND,
-                        arrowcolor=COLOR_TEXT, foreground=COLOR_TEXT, borderwidth=0, relief='flat')
+        style.configure('App.TEntry', fieldbackground=COLOR_SECONDARY_BACKGROUND, foreground=COLOR_TEXT,
+                        insertcolor=COLOR_TEXT, borderwidth=0, relief='flat', font=(FONT_FAMILY_UI, 10))
+        style.configure('Placeholder.TEntry', fieldbackground=COLOR_SECONDARY_BACKGROUND, foreground=COLOR_PLACEHOLDER,
+                        insertcolor=COLOR_TEXT, borderwidth=0, relief='flat', font=(FONT_FAMILY_UI, 10))
+
+        style.configure('App.TCombobox', fieldbackground=COLOR_SECONDARY_BACKGROUND, background=COLOR_SECONDARY_BACKGROUND,
+                        arrowcolor=COLOR_TEXT, foreground=COLOR_TEXT, borderwidth=0, relief='flat',
+                        font=(FONT_FAMILY_UI, 10))
+        style.configure('Placeholder.TCombobox', fieldbackground=COLOR_SECONDARY_BACKGROUND, background=COLOR_SECONDARY_BACKGROUND,
+                        arrowcolor=COLOR_TEXT, foreground=COLOR_PLACEHOLDER, borderwidth=0, relief='flat',
+                        font=(FONT_FAMILY_UI, 10))
         self.option_add('*TCombobox*Listbox.background', COLOR_SECONDARY_BACKGROUND)
         self.option_add('*TCombobox*Listbox.foreground', COLOR_TEXT)
         self.option_add('*TCombobox*Listbox.selectBackground', COLOR_ACCENT)
         self.option_add('*TCombobox*Listbox.selectForeground', COLOR_TEXT_EMPHASIS)
+        self.option_add('*TCombobox*Listbox.font', (FONT_FAMILY_UI, 10))
+        self.option_add('*TCombobox*Listbox.relief', 'flat')
+        self.option_add('*TCombobox*Listbox.borderwidth', 0)
 
-        # --- [MODIFIED] Scrollbar Style (uses new ACCENT color) ---
-        style.configure('TScrollbar', gripcount=0, background=COLOR_ACCENT, troughcolor=COLOR_SECONDARY_BACKGROUND,
-                        borderwidth=0, relief='flat', arrowcolor=COLOR_SECONDARY_BACKGROUND)
+        style.configure('TScrollbar',
+                gripcount=0,
+                background=COLOR_ACCENT,
+                troughcolor=COLOR_PRIMARY_BACKGROUND,
+                borderwidth=0,
+                relief='flat',
+                arrowcolor=COLOR_TEXT_EMPHASIS)
         style.map('TScrollbar', background=[('active', COLOR_ACCENT_HOVER)])
 
-        # --- [NEW] Round Button Style ---
-        # This is an advanced technique. We are defining a custom layout for a button,
-        # telling it to use a 'button' element (which respects the background color)
-        # as its main component, effectively creating a custom shape.
         style.layout('Round.TButton', [
             ('Button.button', {'children': [
                 ('Button.focus', {'children': [
@@ -317,11 +303,10 @@ class EchoSnipApp(tk.Tk):
             ], 'sticky': 'nswe'})
         ])
         
-        # Now we configure our new 'Round.TButton' style
         style.configure('Round.TButton',
             background=COLOR_ACCENT,
             foreground=COLOR_TEXT_EMPHASIS,
-            font=('Segoe UI', 10, 'bold'),
+            font=(FONT_FAMILY_UI, 10, 'bold'),
             padding=(10, 5),
             borderwidth=0,
             relief='flat'
@@ -336,16 +321,16 @@ class EchoSnipApp(tk.Tk):
         desc = self.desc_entry.get()
         lang = self.lang_combobox.get()
         
-        # --- [MODIFIED] Validation for placeholder text ---
+        self.results_text.delete('1.0', tk.END)
+
         if desc == self.desc_placeholder or not desc:
-            self.status_bar.config(text="Error: Please enter a description.")
+            self.results_text.insert('1.0', "Error: Please enter a description to search for.")
             return
         if lang == self.lang_placeholder or not lang:
-            self.status_bar.config(text="Error: Please select a language.")
+            self.results_text.insert('1.0', "Error: Please select a language.")
             return
 
-        self.status_bar.config(text="Searching...")
-        self.results_text.delete('1.0', tk.END)
+        self.results_text.insert('1.0', "Searching...")
         self.search_button.config(state="disabled")
         self.update_idletasks()
         try:
@@ -354,6 +339,8 @@ class EchoSnipApp(tk.Tk):
             results = find_snippets_by_keyword(keywords, lang)
             elapsed_time = time.time() - start_time
             elapsed_str = f"Search completed in {elapsed_time:.2f} seconds"
+            
+            self.results_text.delete('1.0', tk.END)
             output_lines = [f"---- Found {len(results)} snippet(s) ----", elapsed_str + "\n"]
             if not results:
                 output_lines.append("No snippets found matching your criteria.")
@@ -362,63 +349,17 @@ class EchoSnipApp(tk.Tk):
                     output_lines.append(snippet)
                     output_lines.append("=" * 70)
             self.results_text.insert('1.0', "\n".join(output_lines))
-            self.status_bar.config(text=elapsed_str)
         except Exception as e:
             error_message = f"An error occurred: {e}"
+            self.results_text.delete('1.0', tk.END)
             self.results_text.insert('1.0', error_message)
-            self.status_bar.config(text="Error.")
             debug_log(f"GUI SEARCH ERROR: {e}")
         finally:
             self.search_button.config(state="normal")
 
 #**% Main execution block
 if __name__ == "__main__":
-    load_config()
-    app = EchoSnipApp()
-    app.mainloop()
-
-"""
-# This is the old, unused command-line logic for debugging or reference
-def get_user_input():
-    print("Enter description: ")
-    desc = input()
-
-    supported_langs = ", ".join(CONFIG['languages'].keys())
-    print(f"Supported languages: {supported_langs}")
-    print("Enter language name (e.g., Python, HTML):")
-    lang_name = input()
-
-    lang_name_lower = lang_name.lower()
-    for key in CONFIG['languages'].keys():
-        if key.lower() == lang_name_lower:
-            debug_log(f" User input received. Description: '{desc}', Language: '{key}'.")
-            return desc, key
-    
-    debug_log(f" User entered language '{lang_name}', which is NOT in the config.")
-    debug_log(f" Error: '{lang_name}' is not a supported language in your config.")
-    return None, None
-
-def old_main():
-    desc, lang = get_user_input()
-    
-    if desc and lang:
-        keywords = desc.lower().split()
-        start_time = time.time()
-        results = find_snippets_by_keyword(keywords, lang)
-        elapsed_time = time.time() - start_time
-        elapsed_str = f" Search completed in {elapsed_time:.2f} seconds"
-    
-        output_path = CONFIG['output_path']
-        try:
-            with open(output_path, 'w', encoding="utf-8") as file:
-                file.write(f" ---- Found {len(results)} snippet(s) ----\n")
-                file.write(elapsed_str + "\n\n")
-                for snippet in results:
-                    file.write(snippet + "\n" + "="*70 + "\n")
-            debug_log(f" Results successfully written to '{output_path}'")
-            debug_log(elapsed_str)
-        except Exception as e:
-            debug_log(f" ERROR: Failed to write to output file '{output_path}': {e}")
-        debug_log(" Script execution completed.")
-        debug_log()
-"""
+    # Load config and show visual error if it fails, then exit.
+    if load_config():
+        app = EchoSnipApp()
+        app.mainloop()
