@@ -2,6 +2,7 @@ import os
 import re
 import yaml
 import time
+import glob
 from datetime import datetime
 import tkinter as tk
 from tkinter import ttk
@@ -169,77 +170,57 @@ def extract_html_tag_block(lines, start_idx, identifier):
 
 #**% Find snippet based on keyword in files
 def find_snippets_by_keyword(keywords, language):
-    all_snippets = []
     found_snippets_keys = set()
     lang_info = CONFIG['languages'][language]
     folder_path = CONFIG['folder_path']
-    debug_log(f"Starting search in folder: '{folder_path}' for language '{language}'.")
+    ignore_folders = set(CONFIG.get('ignore_folders', []))
+    extensions_to_find = lang_info['extensions']
 
-    for root, _, files in os.walk(folder_path):
-        debug_log(f"Walking directory: '{root}'")
-        for file in files:
-            if not any(file.endswith(ext) for ext in lang_info['extensions']):
-                debug_log(f"  Skipping file '{file}' (extension does not match {lang_info['extensions']})")
-                continue
-            
-            file_path = os.path.abspath(os.path.join(root, file))
-            debug_log(f"  Scanning file: {file_path}")
+    debug_log(f"Starting generator search in folder: '{folder_path}' for language '{language}'.")
+
+    for root, dirs, _ in os.walk(folder_path, topdown=True):
+        dirs[:] = [d for d in dirs if d not in ignore_folders]
+        
+        relevant_files = []
+        for ext in extensions_to_find:
+            relevant_files.extend(glob.glob(os.path.join(root, f"*{ext}")))
+
+        for file_path in relevant_files:
             try:
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                     lines = f.readlines()
-                debug_log(f"    Successfully read {len(lines)} lines.")
                 
                 i = 0
                 while i < len(lines):
                     line = lines[i]
                     is_marker_line = line.strip().startswith(lang_info['comment_start']) and lang_info['identifier'] in line
-                    
-                    if is_marker_line:
-                        has_all_keywords = all(kw in line.lower() for kw in keywords)
-                        if has_all_keywords:
-                            clean_desc = line.strip().replace(lang_info['comment_start'], '', 1)
-                            if 'comment_end' in lang_info:
-                                clean_desc = clean_desc.replace(lang_info['comment_end'], '', 1)
-                            clean_desc = clean_desc.replace(lang_info['identifier'], '').strip()
-                            
-                            file_base_name = os.path.splitext(os.path.basename(file_path))[0]
-                            unique_key = (file_base_name, clean_desc)
+                    if is_marker_line and all(kw in line.lower() for kw in keywords):
+                        clean_desc = line.strip().replace(lang_info['comment_start'], '', 1)
+                        if 'comment_end' in lang_info: clean_desc = clean_desc.replace(lang_info['comment_end'], '', 1)
+                        clean_desc = clean_desc.replace(lang_info['identifier'], '').strip()
+                        
+                        file_base_name = os.path.splitext(os.path.basename(file_path))[0]
+                        unique_key = (file_base_name, clean_desc)
 
-                            if unique_key not in found_snippets_keys:
-                                found_snippets_keys.add(unique_key)
-                                debug_log(f"    MATCH FOUND on line {i+1}: '{line.strip()}' (Unique Key: {unique_key})")
-                                
-                                block_type = lang_info['block_type']
-                                block_content = ""
-                                debug_log(f"      Dispatching to '{block_type}' extractor.")
-                                if block_type == "indentation":
-                                    block_content, _ = extract_identation_block(lines, i)
-                                elif block_type == "brace":
-                                    block_content, _ = extract_brace_block(lines, i)
-                                elif block_type == 'html_tag':
-                                    block_content, _ = extract_html_tag_block(lines, i, lang_info['identifier'])
-                                elif block_type == "marker":
-                                    end_marker = lang_info.get('end_marker', f"{lang_info['identifier']} END")
-                                    block_content, _ = extract_marker_block(lines, i, end_marker)
-                                
-                                if not block_content:
-                                    debug_log(f"      WARNING: Block extraction for '{clean_desc}' returned empty content.", level="WARN")
-                                else:
-                                    debug_log(f"      Successfully extracted block for '{clean_desc}'. Adding to results.")
-                                
+                        if unique_key not in found_snippets_keys:
+                            found_snippets_keys.add(unique_key)
+                            block_type = lang_info['block_type']
+                            block_content = ""
+                            if block_type == "indentation": block_content, _ = extract_identation_block(lines, i)
+                            elif block_type == "brace": block_content, _ = extract_brace_block(lines, i)
+                            elif block_type == 'html_tag': block_content, _ = extract_html_tag_block(lines, i, lang_info['identifier'])
+                            elif block_type == "marker":
+                                end_marker = lang_info.get('end_marker', f"{lang_info['identifier']} END")
+                                block_content, _ = extract_marker_block(lines, i, end_marker)
+                            
+                            if block_content:
                                 header = f"--- SNIPPET FOUND IN: {file_path} (Line {i+1}) ---\n"
                                 header += f"--- DESCRIPTION: {clean_desc} ---\n\n"
-                                all_snippets.append(header + block_content)
-                            else:
-                                debug_log(f"    Skipping duplicate snippet on line {i+1}: '{clean_desc}'")
-                        else:
-                            debug_log(f"    Marker found on line {i+1}, but not all keywords matched in '{line.strip()}'")
+                                
+                                yield header + block_content
                     i += 1
             except Exception as e:
                 debug_log(f"ERROR: Could not process {file_path}: {e}")
-    
-    debug_log(f"Finished search. Total snippets found: {len(all_snippets)}")
-    return all_snippets
 
 #**% Tkinter GUI
 class EchoSnipApp(tk.Tk):
@@ -290,6 +271,10 @@ class EchoSnipApp(tk.Tk):
 
         scrollbar.pack(side="right", fill="y")
         self.results_text.pack(side="left", fill="both", expand=True)
+
+        self.search_generator = None
+        self.snippet_count = 0
+        self.start_time = 0
 
     def _add_placeholder_desc(self, event=None):
         if not self.desc_entry.get():
@@ -367,11 +352,15 @@ class EchoSnipApp(tk.Tk):
         )
 
     def perform_search(self):
+        if self.search_generator:
+            debug_log("Search cancelled because a new search was started.", "WARN")
+        
+        self.results_text.delete('1.0', tk.END)
+        self.snippet_count = 0
+
         desc = self.desc_entry.get()
         lang = self.lang_combobox.get()
         
-        self.results_text.delete('1.0', tk.END)
-
         if desc == self.desc_placeholder or not desc:
             self.results_text.insert('1.0', "Error: Please enter a description to search for.")
             return
@@ -379,36 +368,59 @@ class EchoSnipApp(tk.Tk):
             self.results_text.insert('1.0', "Error: Please select a language.")
             return
 
-        self.results_text.insert('1.0', "Searching...")
         self.search_button.config(state="disabled")
+        self.results_text.insert('1.0', "Searching...")
         self.update_idletasks()
-        try:
-            keywords = desc.lower().split()
-            debug_log(f"GUI search initiated. Language: '{lang}', Keywords: {keywords}")
+        
+        keywords = desc.lower().split()
+        debug_log(f"GUI search initiated. Language: '{lang}', Keywords: {keywords}")
+        
+        self.start_time = time.time()
+        self.search_generator = find_snippets_by_keyword(keywords, lang)
+        self.after(20, self._process_search_results)
 
-            start_time = time.time()
-            results = find_snippets_by_keyword(keywords, lang)
-            elapsed_time = time.time() - start_time
-            elapsed_str = f"Search completed in {elapsed_time:.2f} seconds"
+    def _process_search_results(self):
+        try:
+            snippet = next(self.search_generator)
             
-            debug_log(f"Displaying {len(results)} results in GUI.")
-            self.results_text.delete('1.0', tk.END)
-            output_lines = [f"---- Found {len(results)} snippet(s) ----", elapsed_str + "\n"]
-            if not results:
-                output_lines.append("No snippets found matching your criteria.")
+            if self.snippet_count == 0:
+                self.results_text.delete('1.0', tk.END)
+            
+            self.snippet_count += 1
+            
+            self.results_text.delete('1.0', '2.0')
+            header = f"---- Found {self.snippet_count} snippet(s) so far... ----\n"
+            self.results_text.insert('1.0', header)
+            
+            self.results_text.insert(tk.END, snippet + "\n" + "=" * 70 + "\n")
+            
+            self.after(10, self._process_search_results)
+
+        except StopIteration:
+            
+            elapsed_time = time.time() - self.start_time
+            elapsed_str = f"Search completed in {elapsed_time:.2f} seconds"
+
+            if self.snippet_count == 0:
+                self.results_text.delete('1.0', tk.END)
+                self.results_text.insert('1.0', f"---- Found 0 snippet(s) ----\n{elapsed_str}\n\nNo snippets found matching your criteria.")
             else:
-                for snippet in results:
-                    output_lines.append(snippet)
-                    output_lines.append("=" * 70)
-            self.results_text.insert('1.0', "\n".join(output_lines))
+                self.results_text.delete('1.0', '2.0')
+                header = f"---- Found {self.snippet_count} snippet(s) ----\n---- {elapsed_str} ----\n"
+                self.results_text.insert('1.0', header)
+            
+            self.search_generator = None
+            self.search_button.config(state="normal")
+            debug_log(f"GUI search process finished successfully in {elapsed_time:.2f}s.")
+            
         except Exception as e:
-            error_message = f"An error occurred: {e}"
+            error_message = f"An error occurred during search: {e}"
             self.results_text.delete('1.0', tk.END)
             self.results_text.insert('1.0', error_message)
-            debug_log(f"GUI SEARCH ERROR: {e}")
-        finally:
+
+            self.search_generator = None
             self.search_button.config(state="normal")
-            debug_log("GUI search process finished.")
+            debug_log(f"GUI SEARCH ERROR: {e}", "ERROR")
 
 #**% Main execution block
 if __name__ == "__main__":

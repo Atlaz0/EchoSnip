@@ -9,13 +9,22 @@
 
 # --- General Settings ---
 # The top-level folder where your code projects are stored.
-folder_path: "C:/path/to/code/folder"
+folder_path: "C:/path/to/file/folder"
 
 # Path for the debug log file.
-debug_log_path: "C:/path/to/your/debug_log.txt"
+debug_log_path: "C:/path/to/debug_log.txt"
 
 # Set to 'true' to enable detailed logging for troubleshooting.
 debug: false
+
+# Folders to ignore during the search. This dramatically improves performance.
+ignore_folders:
+  - ".git"
+  - "node_modules"
+  - "__pycache__"
+  - "venv"
+  - ".vscode"
+  - ".idea"
 
 # ===================================================================
 # Language Definitions
