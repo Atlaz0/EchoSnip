@@ -7,7 +7,7 @@
 
 Stop hunting through old projects for that perfect function or component. With EchoSnip, you can tag your best code with a simple comment and recall it instantly with a keyword search.
 
-![Screenshot](https://ibb.co/1Gxqh0cF/echosnip-screenshot.png)
+![App preview](https://res.cloudinary.com/deftgalbo/image/upload/v1752245655/Screenshot_2025-07-11_175350_yismfq.png)
 
 ## Key Features
 
