@@ -6,6 +6,7 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
+import sys
 
 #**% Global variable
 CONFIG = {}
@@ -45,7 +46,7 @@ def load_config(path="config.yaml"):
     try:
         with open(path, "r") as f:
             CONFIG = yaml.safe_load(f)
-        debug_log("Config file loaded successfully.")
+        debug_log(f"Config file loaded successfully from '{path}'.")
         return True
     except FileNotFoundError:
         messagebox.showerror("Fatal Error", f"Config file '{path}' not found.\nPlease ensure 'config.yaml' exists in the same directory as the application.")
@@ -56,58 +57,83 @@ def load_config(path="config.yaml"):
 
 #**% Extract identation block
 def extract_identation_block(lines, start_idx):
+    debug_log("-> Running extract_identation_block")
     block_start_idx = -1
     for i in range(start_idx + 1, len(lines)):
         if lines[i].strip():
             block_start_idx = i
             break
-    if block_start_idx == -1: return "", start_idx
+    if block_start_idx == -1:
+        debug_log("-> No non-empty lines found after marker. Returning empty block.", "WARN")
+        return "", start_idx
 
     base_indent = len(lines[block_start_idx]) - len(lines[block_start_idx].lstrip())
+    debug_log(f"-> Block starts on line {block_start_idx + 1}. Base indentation is {base_indent} spaces.")
     block_lines = []
+    end_line_idx = len(lines) -1
     for i in range(block_start_idx, len(lines)):
         line = lines[i]
         if i > block_start_idx and line.strip():
             current_indent = len(line) - len(line.lstrip())
             if current_indent <= base_indent:
-                return "".join(block_lines).rstrip(), i - 1
+                end_line_idx = i - 1
+                break
         block_lines.append(line)
-    return "".join(block_lines).rstrip(), len(lines) - 1
+
+    result = "".join(block_lines).rstrip()
+    debug_log(f"-> Indentation block extracted. Length: {len(result)} chars, ends at line {end_line_idx + 1}.")
+    return result, end_line_idx
 
 #**% Extract brace block
 def extract_brace_block(lines, start_idx):
+    debug_log("-> Running extract_brace_block")
     block_start_idx = -1
     for i in range(start_idx + 1, len(lines)):
         if '{' in lines[i]:
             block_start_idx = i
             break
-    if block_start_idx == -1: return "", start_idx
-
+    if block_start_idx == -1:
+        debug_log("-> No opening brace '{' found after marker. Returning empty block.", "WARN")
+        return "", start_idx
+    
+    debug_log(f"-> Block starts on line {block_start_idx + 1} with first opening brace.")
     block_lines = []
     brace_count = 0
+    end_line_idx = len(lines) -1
     for i in range(block_start_idx, len(lines)):
         line = lines[i]
         block_lines.append(line)
         brace_count += line.count('{')
         brace_count -= line.count('}')
         if brace_count <= 0:
-            return "".join(block_lines).rstrip(), i
-    return "".join(block_lines).rstrip(), i
+            end_line_idx = i
+            break
+            
+    result = "".join(block_lines).rstrip()
+    debug_log(f"-> Brace block extracted. Length: {len(result)} chars, ends at line {end_line_idx + 1}.")
+    return result, end_line_idx
 
 #**% Extract marker block
 def extract_marker_block(lines, start_idx, end_marker):
+    debug_log(f"-> Running extract_marker_block, looking for end marker: '{end_marker}'")
     block = []
+    end_line_idx = len(lines) -1
     for i in range(start_idx + 1, len(lines)):
         line = lines[i]
         if end_marker in line:
-            return "".join(block).rstrip(), i
+            end_line_idx = i
+            break
         block.append(line)
-    return "".join(block).rstrip(), i
+    
+    result = "".join(block).rstrip()
+    debug_log(f"-> Marker block extracted. Length: {len(result)} chars, ends at line {end_line_idx + 1}.")
+    return result, end_line_idx
 
 SELF_CLOSING_TAGS = {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'}
 
 #**% Extract HTML code block with tags
 def extract_html_tag_block(lines, start_idx, identifier):
+    debug_log("-> Running extract_html_tag_block")
     block_start_idx = -1
     first_tag_name = ""
     for i in range(start_idx + 1, len(lines)):
@@ -118,20 +144,28 @@ def extract_html_tag_block(lines, start_idx, identifier):
                 first_tag_name = tag_name
                 block_start_idx = i
                 break
-    if block_start_idx == -1: return "", start_idx
-
+    if block_start_idx == -1:
+        debug_log("-> No non-self-closing HTML tag found after marker. Returning empty block.", "WARN")
+        return "", start_idx
+    
+    debug_log(f"-> Block starts on line {block_start_idx + 1}. Tracking tag: '<{first_tag_name}>'")
     block_lines = []
     tag_balance = 0
     open_tag_regex = re.compile(r'<\s*' + re.escape(first_tag_name) + r'[\s>]', re.IGNORECASE)
     close_tag_regex = re.compile(r'</\s*' + re.escape(first_tag_name) + r'\s*>', re.IGNORECASE)
+    end_line_idx = len(lines) - 1
     for i in range(block_start_idx, len(lines)):
         line = lines[i]
         block_lines.append(line)
         tag_balance += len(re.findall(open_tag_regex, line))
         tag_balance -= len(re.findall(close_tag_regex, line))
         if tag_balance <= 0:
-            return "".join(block_lines).rstrip(), i
-    return "".join(block_lines).rstrip(), len(lines) - 1
+            end_line_idx = i
+            break
+            
+    result = "".join(block_lines).rstrip()
+    debug_log(f"-> HTML tag block extracted. Length: {len(result)} chars, ends at line {end_line_idx + 1}.")
+    return result, end_line_idx
 
 #**% Find snippet based on keyword in files
 def find_snippets_by_keyword(keywords, language):
@@ -139,57 +173,72 @@ def find_snippets_by_keyword(keywords, language):
     found_snippets_keys = set()
     lang_info = CONFIG['languages'][language]
     folder_path = CONFIG['folder_path']
+    debug_log(f"Starting search in folder: '{folder_path}' for language '{language}'.")
 
     for root, _, files in os.walk(folder_path):
+        debug_log(f"Walking directory: '{root}'")
         for file in files:
             if not any(file.endswith(ext) for ext in lang_info['extensions']):
+                debug_log(f"  Skipping file '{file}' (extension does not match {lang_info['extensions']})")
                 continue
             
             file_path = os.path.abspath(os.path.join(root, file))
-            debug_log(f" Scanning file: {file_path}")
+            debug_log(f"  Scanning file: {file_path}")
             try:
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                     lines = f.readlines()
+                debug_log(f"    Successfully read {len(lines)} lines.")
                 
                 i = 0
                 while i < len(lines):
                     line = lines[i]
                     is_marker_line = line.strip().startswith(lang_info['comment_start']) and lang_info['identifier'] in line
-                    has_all_keywords = all(kw in line.lower() for kw in keywords)
-
-                    if is_marker_line and has_all_keywords:
-                        clean_desc = line.strip().replace(lang_info['comment_start'], '', 1)
-                        if 'comment_end' in lang_info:
-                            clean_desc = clean_desc.replace(lang_info['comment_end'], '', 1)
-                        clean_desc = clean_desc.replace(lang_info['identifier'], '').strip()
-                        
-                        file_base_name = os.path.splitext(os.path.basename(file_path))[0]
-                        unique_key = (file_base_name, clean_desc)
-
-                        if unique_key not in found_snippets_keys:
-                            found_snippets_keys.add(unique_key)
+                    
+                    if is_marker_line:
+                        has_all_keywords = all(kw in line.lower() for kw in keywords)
+                        if has_all_keywords:
+                            clean_desc = line.strip().replace(lang_info['comment_start'], '', 1)
+                            if 'comment_end' in lang_info:
+                                clean_desc = clean_desc.replace(lang_info['comment_end'], '', 1)
+                            clean_desc = clean_desc.replace(lang_info['identifier'], '').strip()
                             
-                            block_type = lang_info['block_type']
-                            if block_type == "indentation":
-                                block_content, _ = extract_identation_block(lines, i)
-                            elif block_type == "brace":
-                                block_content, _ = extract_brace_block(lines, i)
-                            elif block_type == 'html_tag':
-                                block_content, _ = extract_html_tag_block(lines, i, lang_info['identifier'])
-                            elif block_type == "marker":
-                                end_marker = lang_info.get('end_marker', f"{lang_info['identifier']} END")
-                                block_content, _ = extract_marker_block(lines, i, end_marker)
+                            file_base_name = os.path.splitext(os.path.basename(file_path))[0]
+                            unique_key = (file_base_name, clean_desc)
+
+                            if unique_key not in found_snippets_keys:
+                                found_snippets_keys.add(unique_key)
+                                debug_log(f"    MATCH FOUND on line {i+1}: '{line.strip()}' (Unique Key: {unique_key})")
+                                
+                                block_type = lang_info['block_type']
+                                block_content = ""
+                                debug_log(f"      Dispatching to '{block_type}' extractor.")
+                                if block_type == "indentation":
+                                    block_content, _ = extract_identation_block(lines, i)
+                                elif block_type == "brace":
+                                    block_content, _ = extract_brace_block(lines, i)
+                                elif block_type == 'html_tag':
+                                    block_content, _ = extract_html_tag_block(lines, i, lang_info['identifier'])
+                                elif block_type == "marker":
+                                    end_marker = lang_info.get('end_marker', f"{lang_info['identifier']} END")
+                                    block_content, _ = extract_marker_block(lines, i, end_marker)
+                                
+                                if not block_content:
+                                    debug_log(f"      WARNING: Block extraction for '{clean_desc}' returned empty content.", level="WARN")
+                                else:
+                                    debug_log(f"      Successfully extracted block for '{clean_desc}'. Adding to results.")
+                                
+                                header = f"--- SNIPPET FOUND IN: {file_path} (Line {i+1}) ---\n"
+                                header += f"--- DESCRIPTION: {clean_desc} ---\n\n"
+                                all_snippets.append(header + block_content)
                             else:
-                                debug_log(f"ERROR: Unknown block_type '{block_type}' for language '{language}'.")
-                                i += 1
-                                continue
-                            
-                            header = f"--- SNIPPET FOUND IN: {file_path} (Line {i+1}) ---\n"
-                            header += f"--- DESCRIPTION: {clean_desc} ---\n\n"
-                            all_snippets.append(header + block_content)
+                                debug_log(f"    Skipping duplicate snippet on line {i+1}: '{clean_desc}'")
+                        else:
+                            debug_log(f"    Marker found on line {i+1}, but not all keywords matched in '{line.strip()}'")
                     i += 1
             except Exception as e:
                 debug_log(f"ERROR: Could not process {file_path}: {e}")
+    
+    debug_log(f"Finished search. Total snippets found: {len(all_snippets)}")
     return all_snippets
 
 #**% Tkinter GUI
@@ -335,11 +384,14 @@ class EchoSnipApp(tk.Tk):
         self.update_idletasks()
         try:
             keywords = desc.lower().split()
+            debug_log(f"GUI search initiated. Language: '{lang}', Keywords: {keywords}")
+
             start_time = time.time()
             results = find_snippets_by_keyword(keywords, lang)
             elapsed_time = time.time() - start_time
             elapsed_str = f"Search completed in {elapsed_time:.2f} seconds"
             
+            debug_log(f"Displaying {len(results)} results in GUI.")
             self.results_text.delete('1.0', tk.END)
             output_lines = [f"---- Found {len(results)} snippet(s) ----", elapsed_str + "\n"]
             if not results:
@@ -356,10 +408,17 @@ class EchoSnipApp(tk.Tk):
             debug_log(f"GUI SEARCH ERROR: {e}")
         finally:
             self.search_button.config(state="normal")
+            debug_log("GUI search process finished.")
 
 #**% Main execution block
 if __name__ == "__main__":
-    # Load config and show visual error if it fails, then exit.
-    if load_config():
+    if getattr(sys, 'frozen', False):
+        application_path = os.path.dirname(sys.executable)
+    else:
+        application_path = os.path.dirname(os.path.abspath(__file__))
+
+    config_path = os.path.join(application_path, 'config.yaml')
+
+    if load_config(path=config_path):
         app = EchoSnipApp()
         app.mainloop()

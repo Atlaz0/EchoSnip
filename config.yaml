@@ -1,4 +1,3 @@
-      
 # ===================================================================
 # EchoSnip Configuration File
 # ===================================================================
@@ -10,7 +9,7 @@
 
 # --- General Settings ---
 # The top-level folder where your code projects are stored.
-folder_path: "C:/path/to/your/projects"
+folder_path: "C:/path/to/code/folder"
 
 # Path for the debug log file.
 debug_log_path: "C:/path/to/your/debug_log.txt"
@@ -101,7 +100,7 @@ languages:
     comment_start: "//"
 
   # --- Compiled Languages ---
-  Cpp: # C++
+  C++:
     extensions: [".cpp", ".hpp", ".h"]
     block_type: "brace"
     identifier: "**%"
