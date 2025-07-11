@@ -32,8 +32,18 @@ This allows you to pull up complete, ready-to-use snippets, not just single line
 
 1.  Go to the [Releases page](https://github.com/Atlaz0/EchoSnip/releases) on GitHub.
 2.  Download the latest `EchoSnip.exe` file.
-3.  Place the `.exe` file in a folder along with the `config.yaml` file.
-4.  Run `EchoSnip.exe`. That's it!
+
+> **Important Note for Windows Users:**
+>
+> When you first run `EchoSnip.exe`, Windows Defender SmartScreen will likely show a blue pop-up screen that says "Windows protected your PC".
+>
+> **This is normal for new applications from individual developers.** Because the application is not "code signed" (an expensive process for hobbyists), Windows treats it with caution until it builds a reputation. The application is safe to use.
+>
+> To run the application, please follow these steps:
+> 1. On the blue screen, click the `More info` link.
+> 2. A new button will appear. Click `Run anyway`.
+> 3.  Place the `.exe` file in a folder along with the `config.yaml` file.
+> 4.  Run `EchoSnip.exe`. That's it!
 
 ### For Developers (Running from Source)
 
