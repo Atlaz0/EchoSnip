@@ -42,8 +42,8 @@ This allows you to pull up complete, ready-to-use snippets, not just single line
 > To run the application, please follow these steps:
 > 1. On the blue screen, click the `More info` link.
 > 2. A new button will appear. Click `Run anyway`.
-> 3.  Place the `.exe` file in a folder along with the `config.yaml` file.
-> 4.  Run `EchoSnip.exe`. That's it!
+3.  Place the `.exe` file in a folder along with the `config.yaml` file.
+4.  Run `EchoSnip.exe`. That's it!
 
 ### For Developers (Running from Source)
 
